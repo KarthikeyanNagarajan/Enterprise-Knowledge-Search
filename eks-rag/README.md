@@ -42,6 +42,12 @@ Combines multiple retrieval strategies for better result quality.
 
 Connects to local inference and embedding models running through Ollama for LLM generation and vector generation.
 
+### Spring AI integration (SpringAiRagService)
+
+A second, parallel RAG pipeline built on Spring AI's portable abstractions (`ChatClient`, `EmbeddingModel`, `VectorStore`), kept alongside the manual `RagService`/`EmbeddingService` WebClient implementation for comparison.
+Uses its own `vector_store` table (managed by Spring AI's `PgVectorStore`, separate from the `vector_embeddings` table used by the manual pipeline).
+Exposed directly via `SpringAiRagController` (`/rag/spring-ai/**`) and also wired into `eks-chat`'s v2 conversation API (`/api/v2/chat/**`).
+
 ## Working Flow
 
 1. Document chunks are generated in the document module.

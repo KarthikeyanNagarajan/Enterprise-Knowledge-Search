@@ -39,6 +39,8 @@ public class SecurityConfiguration {
                     "/api/v1/auth/login"
                 ).permitAll()
                 .requestMatchers("/api/v1/**").authenticated()
+                .requestMatchers("/api/v2/**").authenticated()
+                .requestMatchers("/rag/spring-ai/**").authenticated()
                 .anyRequest().permitAll()
             )
             .authenticationProvider(authenticationProvider())

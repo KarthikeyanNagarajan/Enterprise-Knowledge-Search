@@ -6,6 +6,7 @@ import com.karthik.eks.chat.repository.ConversationRepository;
 import com.karthik.eks.chat.repository.MessageRepository;
 import com.karthik.eks.common.exception.ResourceNotFoundException;
 import com.karthik.eks.rag.service.RagService;
+import com.karthik.eks.rag.service.SpringAiRagService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -30,6 +31,9 @@ class ChatServiceTest {
 
     @Mock
     private RagService ragService;
+
+    @Mock
+    private SpringAiRagService springAiRagService;
 
     @InjectMocks
     private ChatService chatService;
@@ -68,6 +72,27 @@ class ChatServiceTest {
         assertEquals("answer", response.getAiResponse());
         verify(messageRepository, times(2)).save(any(Message.class));
         verify(conversationRepository).save(conversation);
+    }
+
+    @Test
+    void askQuestionWithSpringAiShouldReturnAiResponseAndSaveMessages() {
+        Conversation conversation = Conversation.builder()
+                .tenantId(1L)
+                .userId(2L)
+                .title("Chat")
+                .messageCount(0)
+                .build();
+        conversation.setId(100L);
+
+        when(conversationRepository.findByIdAndTenantId(100L, 1L)).thenReturn(Optional.of(conversation));
+        when(springAiRagService.ask("question", 1L)).thenReturn("spring-ai-answer");
+
+        ChatService.ChatResponse response = chatService.askQuestionWithSpringAi(100L, 1L, 2L, "question");
+
+        assertEquals("spring-ai-answer", response.getAiResponse());
+        verify(messageRepository, times(2)).save(any(Message.class));
+        verify(conversationRepository).save(conversation);
+        verify(ragService, never()).generateResponse(anyString(), anyLong());
     }
 
     @Test

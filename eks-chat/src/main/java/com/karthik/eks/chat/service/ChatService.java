@@ -6,6 +6,7 @@ import com.karthik.eks.chat.repository.ConversationRepository;
 import com.karthik.eks.chat.repository.MessageRepository;
 import com.karthik.eks.common.exception.ResourceNotFoundException;
 import com.karthik.eks.rag.service.RagService;
+import com.karthik.eks.rag.service.SpringAiRagService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -29,11 +30,11 @@ import java.util.List;
  * - Focuses on conversation management
  * 
  * Request Flow:
- * ChatController
+ * ChatController (v1) or ChatController (v2)
  *   ↓
  * ChatService (manages conversation)
  *   ↓
- * RagService (generates response)
+ * RagService or SpringAiRagService (generates response)
  *   ↓
  * Save message + response
  *   ↓
@@ -47,6 +48,7 @@ public class ChatService {
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepository;
     private final RagService ragService;
+    private final SpringAiRagService springAiRagService;
 
     private static final int MEMORY_WINDOW = 10;  // Keep last 10 messages for context
 
@@ -131,6 +133,64 @@ public class ChatService {
         log.info("AI response saved");
 
         // Update conversation message count
+        conversation.setMessageCount(conversation.getMessageCount() + 2);
+        conversationRepository.save(conversation);
+
+        return ChatResponse.builder()
+                .conversationId(conversationId)
+                .userMessage(userMessage)
+                .aiResponse(aiResponse)
+                .build();
+    }
+
+    /**
+     * Send a message and get an AI response using the Spring AI-backed RAG engine.
+     *
+     * <p>This is the v2 equivalent of {@link #askQuestion(Long, Long, Long, String)} and
+     * intentionally keeps the same conversation/message persistence logic. Only the actual
+     * retrieval-and-generation backend changes to the Spring AI implementation.
+     *
+     * @param conversationId the conversation ID
+     * @param tenantId the tenant ID
+     * @param userId the user ID
+     * @param userMessage the user's question
+     * @return AI response wrapped in the same chat response format used by v1
+     */
+    @Transactional
+    public ChatResponse askQuestionWithSpringAi(Long conversationId, Long tenantId, Long userId, String userMessage) {
+        log.info("Processing Spring AI question for conversation: {}", conversationId);
+
+        Conversation conversation = conversationRepository.findByIdAndTenantId(conversationId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
+
+        Message userMsg = Message.builder()
+                .conversationId(conversationId)
+                .tenantId(tenantId)
+                .role(Message.MessageRole.USER)
+                .content(userMessage)
+                .tokenCount(estimateTokenCount(userMessage))
+                .build();
+        userMsg.setCreatedBy("USER");
+        userMsg.setUpdatedBy("USER");
+
+        messageRepository.save(userMsg);
+        log.info("User message saved");
+
+        String aiResponse = springAiRagService.ask(userMessage, tenantId);
+
+        Message aiMsg = Message.builder()
+                .conversationId(conversationId)
+                .tenantId(tenantId)
+                .role(Message.MessageRole.ASSISTANT)
+                .content(aiResponse)
+                .tokenCount(estimateTokenCount(aiResponse))
+                .build();
+        aiMsg.setCreatedBy("SYSTEM");
+        aiMsg.setUpdatedBy("SYSTEM");
+
+        messageRepository.save(aiMsg);
+        log.info("AI response saved");
+
         conversation.setMessageCount(conversation.getMessageCount() + 2);
         conversationRepository.save(conversation);
 
