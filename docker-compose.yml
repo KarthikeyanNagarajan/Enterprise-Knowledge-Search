@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: eks-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: enterprise_knowledge_search
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - eks-postgres-data:/var/lib/postgresql/data
+      - ./docker/init-pgvector.sql:/docker-entrypoint-initdb.d/init-pgvector.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d enterprise_knowledge_search"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: eks-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - eks-ollama-data:/root/.ollama
+    entrypoint:
+      ["/bin/sh", "-lc", "ollama serve & sleep 10; ollama pull nomic-embed-text:latest; ollama pull llama3:latest; wait"]
+    restart: unless-stopped
+
+  eks-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: eks-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/enterprise_knowledge_search
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_AI_OLLAMA_BASE_URL: http://ollama:11434
+      APP_OLLAMA_ENDPOINT: http://ollama:11434
+    restart: unless-stopped
+
+volumes:
+  eks-postgres-data:
+  eks-ollama-data:
